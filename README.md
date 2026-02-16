@@ -7,7 +7,7 @@ We are:
 ## Gutierrez Avila Tristan Bernardo
 ### Dessigner / Full Stack / UX UI / Tester
 
-## Torrres Pimentel Obed
+## Pacheco Chavarría Arturo Iván
 ### Backend / DB / Full stack
 
 ## Rodríguez Montes de Oca Andrés
