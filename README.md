@@ -15,7 +15,7 @@ We are:
 
 # Architecture & Threat Model
 ## 2. Architecture Diagram
-![Secure Digital Document Vault Architecture](images/architecture.png)
+![Secure Digital Document Vault Architecture](Images/Architecture.png)
 
 ## 7. Design Constraints Derived from Requirements
 | Requirement                                  | Design Constraint                                           |
