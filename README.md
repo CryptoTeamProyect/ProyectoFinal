@@ -14,6 +14,8 @@ We are:
 ### Full Stack  / Security / Dev OPS
 
 # Architecture & Threat Model
+## 2. Architecture Diagram
+![Secure Digital Document Vault Architecture](images/architecture.png)
 
 ## 7. Design Constraints Derived from Requirements
 | Requirement                                  | Design Constraint                                           |
