@@ -186,3 +186,93 @@ It is assumed that an attacker with temporary access to the device may read stor
 | Key import can be abused                     | Must validate **key format/size/fingerprint**               |
 | Secrets must not leak in logs                | Must implement **redacted security logging**                |
 | Security must be implementable               | Must prioritize **AEAD + Signatures + Hybrid + KDF**        |
+
+
+
+
+
+---
+
+# D2 — Secure File Encryption Module
+
+> **"An attacker who obtains the encrypted file must not be able to read or modify its contents without detection."**
+
+A reusable encryption module that guarantees **confidentiality**, **integrity**, and **tamper detection** using **AES-256-GCM** authenticated encryption. At this stage, the system encrypts files for a **single owner only** (no sharing yet).
+
+---
+
+## Encryption Design
+
+### Selected AEAD Algorithm
+
+**AES-256-GCM** (Galois/Counter Mode)
+
+- Industry-standard AEAD cipher recommended by NIST (SP 800-38D).
+- Provides authenticated encryption: confidentiality + integrity + authenticity in a single pass.
+- Hardware-accelerated on modern CPUs via AES-NI instructions.
+- Implementation via Python's [`cryptography`](https://cryptography.io/) library (`cryptography.hazmat.primitives.ciphers.aead.AESGCM`).
+
+### Key Size
+
+| Parameter | Value |
+|-----------|-------|
+| Data Encryption Key (DEK) | **256 bits** (32 bytes) — AES-256 |
+| Key Encryption Key (KEK) | **256 bits** (32 bytes) — derived via PBKDF2 |
+| GCM Authentication Tag | **128 bits** (16 bytes) |
+| PBKDF2 Iterations | **600,000** |
+| KDF Salt | **128 bits** (16 bytes) |
+
+A **fresh DEK** is generated per file using `os.urandom()`. The DEK is then **wrapped** with a KEK derived from the user's passphrase via **PBKDF2-HMAC-SHA256** (random salt, 600,000 iterations).
+
+### Nonce Strategy
+
+| Parameter | Value |
+|-----------|-------|
+| Nonce length | **96 bits** (12 bytes) |
+| Generation method | `os.urandom(12)` — cryptographically secure |
+| Storage | Stored in plaintext inside the `.vault` container |
+
+**Uniqueness guarantees:**
+
+1. Every call to `encrypt_file()` generates a new 12-byte nonce via `os.urandom()`.
+2. A fresh DEK is also generated per file, making a (key, nonce) reuse practically impossible.
+3. We never seed the RNG manually — all randomness comes from the OS-level CSPRNG.
+
+#### Why Nonce Reuse Breaks Security
+
+If the same nonce is used with the same key in AES-GCM:
+
+- **Confidentiality is destroyed**: XOR of two ciphertexts reveals the XOR of plaintexts.
+- **Authentication is compromised**: The GHASH key can be recovered, enabling tag forgery.
+- **This is catastrophic and unrecoverable** — a single reuse can compromise all messages encrypted with that key.
+
+### Metadata Authentication Strategy (AAD)
+
+The header is bound to encryption as **Associated Authenticated Data**:
+
+```json
+{
+  "container_version": 1,
+  "aead_algorithm": "AES-256-GCM",
+  "kdf": "PBKDF2-HMAC-SHA256",
+  "pbkdf2_iterations": 600000,
+  "nonce_length": 12,
+  "tag_length": 16,
+  "created_at": "2026-03-08T05:45:18+00:00",
+  "original_filename": "document.pdf",
+  "original_size": 1024
+}
+```
+
+### Project Structure
+```
+text
+ProyectoFinal/
+├── Images/
+│   ├── Arch.png                  # Architecture diagram
+│   └── Architecture.png          # Detailed architecture diagram
+├── test/
+│   └── test_encryption.py        # Unit tests for encryption module
+├── encryption.py                 # Core encryption/decryption module
+└── README.md                     # This file
+```
