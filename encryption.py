@@ -128,5 +128,67 @@ def b64d(data: str) -> bytes:
     return base64.b64decode(data)
 
 
+def decrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
+    input_file = Path(input_path)
+    
+    if not input_file.exists() or input_file.stat().st_size == 0:
+        raise ValueError(f"El archivo '{input_path}' no existe o está vacío.")
+
+    try:
+        content = input_file.read_text(encoding="utf-8")
+        container = json.loads(content)
+    except json.JSONDecodeError:
+        raise ValueError(f"El archivo '{input_path}' no es un archivo .vault válido (JSON corrupto).")
+
+    header = container["header"]
+    envelope = container["key_envelope"]
+    payload = container["payload"]
+
+    kdf_salt = b64d(envelope["kdf_salt"])
+    kek = derive_kek(passphrase, kdf_salt)
+
+    wrap_nonce = b64d(envelope["wrap_nonce"])
+    wrapped_key = b64d(envelope["wrapped_key"])
+    wrapped_key_tag = b64d(envelope["wrapped_key_tag"])
+    wrap_aad = envelope["wrap_aad"].encode("utf-8")
+
+    key_cipher = AESGCM(kek)
+    file_key = key_cipher.decrypt(wrap_nonce, wrapped_key + wrapped_key_tag, wrap_aad)
+
+    aad = canonical_json(header)
+    file_nonce = b64d(payload["nonce"])
+    ciphertext = b64d(payload["ciphertext"])
+    auth_tag = b64d(payload["tag"])
+
+    file_cipher = AESGCM(file_key)
+    plaintext = file_cipher.decrypt(file_nonce, ciphertext + auth_tag, aad)
+
+    Path(output_path).write_bytes(plaintext)
+
+
+def main() -> None:
+    if len(sys.argv) < 5:
+        print("Usage: python encryption.py <enc|dec> <input_file> <output_file> <passphrase>")
+        sys.exit(1)
+
+    action = sys.argv[1]
+    input_file = sys.argv[2]
+    output_file = sys.argv[3]
+    passphrase = sys.argv[4]
+
+    try:
+        if action == "enc":
+            encrypt_file(input_file, output_file, passphrase)
+            print(f"Cifrado exitoso: {output_file}")
+        elif action == "dec":
+            decrypt_file(input_file, output_file, passphrase)
+            print(f"Descifrado exitoso: {output_file}")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
 
 
