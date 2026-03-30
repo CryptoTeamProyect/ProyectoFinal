@@ -21,7 +21,7 @@ Our names are:
 
 The central problem the **Secure Digital Document Vault** addresses is the reliance on the security of the transport channel or on third-party storage. Today, when uploading a file to the cloud or sending it by email, it is implicitly assumed that the provider will protect the data.
 
-This system starts from the opposite premise: storage and the network should be treated as insecure by default (“Zero Trust”).
+This system starts from the opposite premise: storage and the network should be treated as insecure by default ("Zero Trust").
 
 The goal is to generate digital containers that protect the information by themselves, ensuring confidentiality, integrity, and proof of origin regardless of where they are stored or how they are transmitted.
 
@@ -33,16 +33,16 @@ The system is implemented as a command-line application (CLI) that manages the l
 
 - **Secure Sharing:** The document is encrypted only once. The encryption key is encapsulated individually for each authorized recipient using their respective public keys.
 
-- **Digital Signatures:** The sender cryptographically signs the entire container. This allows the recipient to verify the sender’s identity and ensure the file was not altered in transit before attempting to decrypt it.
+- **Digital Signatures:** The sender cryptographically signs the entire container. This allows the recipient to verify the sender's identity and ensure the file was not altered in transit before attempting to decrypt it.
 
-- **Local Key Protection:** The user’s private keys are stored encrypted on disk, protected by a master password. This ensures that stealing the key file alone is not enough to compromise the user’s identity.
+- **Local Key Protection:** The user's private keys are stored encrypted on disk, protected by a master password. This ensures that stealing the key file alone is not enough to compromise the user's identity.
 
 
 ### Out of Scope
 
 To keep the design strictly focused on the cryptographic protection of the file, the following design limitations are established:
 
-- **No endpoint security guarantees:** If the operating system is compromised (keyloggers, malware, memory access, among others), the vault’s security cannot be guaranteed.
+- **No endpoint security guarantees:** If the operating system is compromised (keyloggers, malware, memory access, among others), the vault's security cannot be guaranteed.
 
 - **No full PKI infrastructure:** Certification Authorities (CAs) and online revocation mechanisms (OCSP) are not implemented. Public-key validation is assumed to happen through direct exchange.
 
@@ -65,16 +65,16 @@ Any unauthorized modification of the encrypted content—whether due to bit corr
 The recipient must be able to cryptographically verify that the file was produced by the expected sender. The system must reject any container whose digital signature does not match the corresponding sender public key, preventing identity spoofing.
 
 **R4 — Private key protection**  
-The user’s private keys must never be stored in plaintext on the device. The Key Store must remain encrypted using a key derived from the user’s password, so that physical access to the key file alone is not sufficient to compromise the owner’s identity without knowing that password.
+The user's private keys must never be stored in plaintext on the device. The Key Store must remain encrypted using a key derived from the user's password, so that physical access to the key file alone is not sufficient to compromise the owner's identity without knowing that password.
 
 **R5 — Integrity of metadata and container structure**  
 The system must detect any alteration of the container header or structure, including the recipient list, format version, or any parameters required for decryption. If metadata has been modified with the intent to change system behavior or mislead the recipient, the process must abort immediately.
 
 **R6 — Verify before decrypt**  
-The container’s authenticity and integrity must be validated before any decryption operation is performed. If the signature or authentication mechanism is invalid, the system must not process the encrypted content, avoiding attacks that exploit malicious inputs.
+The container's authenticity and integrity must be validated before any decryption operation is performed. If the signature or authentication mechanism is invalid, the system must not process the encrypted content, avoiding attacks that exploit malicious inputs.
 
 **R7 — Cryptographic access control**  
-Only identities explicitly selected by the sender during container creation may recover the key required to decrypt the file. There must be no alternative mechanism or “master key” that enables access for unauthorized third parties.
+Only identities explicitly selected by the sender during container creation may recover the key required to decrypt the file. There must be no alternative mechanism or "master key" that enables access for unauthorized third parties.
 
 
 ## 4. Threat Model
@@ -137,13 +137,13 @@ It is assumed that the platform provides a cryptographically secure random numbe
 It is assumed that the public keys of senders and recipients are authentic (not replaced by an attacker). Since a full PKI infrastructure is not implemented, public-key validation is performed through a mechanism external to the system (direct exchange, fingerprints, a trusted channel, etc.).
 
 **A5 — Storage and network are untrusted**  
-It is assumed that the storage and/or transmission medium can be observed and modified by an adversary (“untrusted storage/untrusted network” model). The system must remain secure under this assumption by detecting modifications and preventing content leakage.
+It is assumed that the storage and/or transmission medium can be observed and modified by an adversary ("untrusted storage/untrusted network" model). The system must remain secure under this assumption by detecting modifications and preventing content leakage.
 
 **A6 — Software and cryptographic dependency integrity**  
 It is assumed that the system implementation and the cryptographic libraries used have not been maliciously altered (e.g., supply-chain attacks) and are executed from legitimate binaries/packages.
 
 **A7 — Basic identity management**  
-It is assumed that each cryptographic identity (key pair) corresponds to a real user and that the user understands who they are sharing with (for example, by verifying a fingerprint during key exchange). The system cannot “guess” whether the user selected the correct recipient public key.
+It is assumed that each cryptographic identity (key pair) corresponds to a real user and that the user understands who they are sharing with (for example, by verifying a fingerprint during key exchange). The system cannot "guess" whether the user selected the correct recipient public key.
 
 **A8 — Limited local access by attackers**  
 It is assumed that an attacker with temporary access to the device may read stored files, but does not maintain persistent control during normal system use (for example, cannot observe the process while the user is actively decrypting).
@@ -152,7 +152,7 @@ It is assumed that an attacker with temporary access to the device may read stor
 ## 6. Attack Surface Review
 
 | Entry Point | What Could Go Wrong | Security Property at Risk |
-|-------------|---------------------|--------------------------|
+|-------------|---------------------|-----------------------------|
 | **File input (plaintext upload)** | Malicious file triggers buffer overflow or path traversal during read. Attacker could craft filenames to escape the directory. | Integrity, Availability |
 | **Metadata parsing** | Crafted header in `.vault` file causes injection or parsing errors. Attacker could manipulate filename, timestamp or recipient count to cause crashes or bypass checks. | Integrity, Confidentiality |
 | **Key import/export** | Importing malformed or malicious public key could cause crashes or key confusion (wrong key bound to wrong identity). Exporting to insecure location leaks public keys. | Authenticity, Confidentiality |
@@ -186,7 +186,6 @@ It is assumed that an attacker with temporary access to the device may read stor
 | Key import can be abused                     | Must validate **key format/size/fingerprint**               |
 | Secrets must not leak in logs                | Must implement **redacted security logging**                |
 | Security must be implementable               | Must prioritize **AEAD + Signatures + Hybrid + KDF**        |
-
 
 
 
@@ -265,14 +264,134 @@ The header is bound to encryption as **Associated Authenticated Data**:
 ```
 
 ### Project Structure
-```
-text
 ProyectoFinal/
 ├── Images/
-│   ├── Arch.png                  # Architecture diagram
-│   └── Architecture.png          # Detailed architecture diagram
+│ ├── Arch.png # Architecture diagram
+│ └── Architecture.png # Detailed architecture diagram
 ├── test/
-│   └── test_encryption.py        # Unit tests for encryption module
-├── encryption.py                 # Core encryption/decryption module
-└── README.md                     # This file
+│ └── test_encryption.py # Unit tests for encryption module
+├── encryption.py # Core encryption/decryption module
+└── README.md # This file
+
+
+---
+
+# D3 — Hybrid Encryption & Multi-Recipient Sharing
+
+> **"A document encrypted once must be securely accessible to multiple recipients, each using their own private key, without exposing the content key to unauthorized parties."**
+
+---
+
+## Hybrid Design Explanation
+
+### Why Hybrid Encryption Is Used
+
+Asymmetric encryption algorithms (such as RSA or ECDH) are computationally expensive and have strict limits on the size of data they can encrypt directly. **Hybrid encryption** solves this by combining the strengths of both worlds:
+
+- A **symmetric key** (DEK — Data Encryption Key) encrypts the actual file content using AES-256-GCM. This is fast and handles arbitrary file sizes.
+- An **asymmetric algorithm** (RSA-OAEP or ECDH) encrypts *only the DEK* for each recipient using their public key.
+
+This means the file is encrypted **once**, regardless of how many recipients there are, and only the small DEK is encrypted multiple times — once per recipient.
+
+### Why Symmetric Encryption Is Still Needed
+
+Asymmetric algorithms cannot efficiently encrypt large files:
+
+- **Performance**: AES-256-GCM encrypts gigabytes per second with hardware acceleration. RSA/ECC encryption is orders of magnitude slower.
+- **Size limitation**: RSA-2048 can encrypt at most ~214 bytes of plaintext. Real documents are far larger.
+- **AEAD guarantees**: AES-256-GCM provides built-in integrity and authenticity via its authentication tag, protecting the ciphertext against tampering.
+
+Symmetric encryption handles the bulk data; asymmetric encryption handles the **key distribution problem**.
+
+### Why Per-Recipient Key Encryption Is Required
+
+Each recipient must be able to independently recover the DEK using **only their own private key**, without requiring coordination with other recipients or access to their keys. This design:
+
+- **Isolates access**: A compromised recipient private key only exposes containers they were explicitly added to — it does not affect other recipients.
+- **Enables granular sharing**: The sender controls exactly who can decrypt by choosing which public keys to wrap the DEK with.
+- **Avoids a single point of failure**: There is no shared group secret that, if leaked, would expose all recipients at once.
+
+Each `EncryptedKeyEntry` in the container stores: `recipient_id`, a fresh `ephemeral_public_key` (for ECDH), and the `wrapped_dek` — the DEK encrypted with a key derived from the ECDH shared secret.
+
+---
+
+## Security Decisions
+
+### How Do Recipients Identify Their Key?
+
+Each container header contains a **recipient list** — an array of entries, each including:
+
+- A `recipient_id`: a stable identifier bound to the recipient's public key (e.g., a SHA-256 fingerprint of the public key, or a username registered in the local key store).
+- An `ephemeral_public_key`: the sender's ephemeral EC public key used for that specific ECDH key agreement.
+- A `wrapped_dek`: the DEK encrypted with the key derived from the ECDH shared secret between the sender's ephemeral key and the recipient's static public key.
+
+During decryption, the system scans the recipient list, computes the fingerprint of the local private key, and matches it against `recipient_id`. If a match is found, the corresponding `wrapped_dek` is unwrapped using the private key. If no match is found, decryption is aborted with an explicit error: **"No entry found for this key."**
+
+This design avoids leaking which recipients are present to unauthorized parties — only the holder of the matching private key can confirm their entry.
+
+### What Happens If an Attacker Modifies the Recipient List?
+
+The recipient list is included as part of the **AAD (Associated Authenticated Data)** passed to AES-256-GCM during file encryption, and it is also covered by the **container-level digital signature**.
+
+If an attacker adds, removes, or modifies any recipient entry:
+
+1. **AEAD tag verification fails** — the GCM authentication tag is computed over the ciphertext and AAD. Any change to the AAD (which includes the recipient list) causes tag verification to fail, and decryption is aborted. No plaintext is released.
+2. **Signature verification fails** — the container signature is computed over the full manifest (including the recipient list). A modified recipient list produces a different manifest hash, causing signature verification to fail before any decryption is attempted (verify-before-decrypt policy).
+
+The system **fails closed**: if either check fails, the container is rejected entirely.
+
+### What Happens If the Public Key Is Wrong?
+
+If the sender encrypts the DEK with an **incorrect or mismatched public key** (e.g., wrong recipient's key, or a key that has been substituted by an attacker):
+
+- The intended recipient will **not find a matching entry** in the recipient list (their fingerprint won't match any `recipient_id`). Decryption aborts with "No entry found."
+- If an attacker substituted their own public key, **only the attacker** can unwrap the DEK — but they would need to also forge the container signature to present a valid container, which requires the sender's private signing key.
+- The system cannot automatically detect a wrong-but-valid public key (e.g., an honest mistake by the sender). This is a **key distribution problem** documented in Trust Assumption A4 and A7: public key authenticity must be verified out-of-band (fingerprint comparison, trusted channel, etc.).
+
+This is why the README and threat model explicitly state that **public key validation is the user's responsibility** — the cryptographic system protects against active tampering, but cannot substitute for proper key management.
+
+---
+
+## Container Format (Multi-Recipient)
+
+```json
+{
+  "container_version": 2,
+  "aead_algorithm": "AES-256-GCM",
+  "kdf": "HKDF-SHA256",
+  "created_at": "2026-03-30T00:00:00+00:00",
+  "original_filename": "document.pdf",
+  "original_size": 4096,
+  "nonce": "<base64>",
+  "recipients": [
+    {
+      "recipient_id": "<SHA-256 fingerprint of recipient public key>",
+      "ephemeral_public_key": "<base64 encoded EC public key>",
+      "wrapped_dek": "<base64 encoded encrypted DEK>"
+    }
+  ],
+  "ciphertext": "<base64 encoded encrypted file content>",
+  "signature": "<base64 encoded Ed25519 signature over full manifest>"
+}
 ```
+
+---
+
+## Unit Tests
+
+Unit tests covering the hybrid encryption module are located in `test/test_encryption.py`. The test suite covers:
+
+- **Key generation**: Verify that RSA/EC key pairs are generated with correct parameters.
+- **DEK wrapping/unwrapping**: Confirm that the DEK can be recovered by the correct recipient and rejected for all others.
+- **Wrong key rejection**: Assert that decryption with a mismatched private key raises an appropriate exception.
+- **Recipient list integrity**: Verify that modifying the recipient list causes AEAD tag verification to fail.
+- **Signature verification**: Confirm that a tampered container is rejected before decryption.
+- **Multi-recipient round-trip**: Encrypt for N recipients; verify each can independently decrypt and all others are rejected.
+
+Run the tests with:
+
+```bash
+pytest test/test_encryption.py -v
+```
+
+---
