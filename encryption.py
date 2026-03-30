@@ -1,194 +1,175 @@
-#encryption.py
-#pip install cryptography
-
 from __future__ import annotations
-
-import os
-import json
-import base64
-import sys
+import os, json, base64, sys
 from pathlib import Path
 from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
+
+from asym_encryption import (
+    load_public_key,
+    load_private_key,
+    rsa_encrypt,
+    rsa_decrypt,
+    generate_rsa_keypair
+)
+
+from signature import (
+    sign_container,
+    verify_container_signature,
+    load_private_key as load_sign_priv,
+    load_public_key as load_sign_pub,
+    generate_signing_keypair
+)
 
 
-# ====== CONFIG ======
-PBKDF2_ITER = 600_000
-SALT_LEN = 16
 NONCE_LEN = 12
-DEK_LEN = 32   # 32 bytes = AES-256
-TAG_LEN = 16   # GCM tag = 128 bits
+DEK_LEN = 32
+TAG_LEN = 16
 
 
-# ====== HELPERS ======
-def b64e(data: bytes) -> str:
-    return base64.b64encode(data).decode("utf-8")
+def b64e(b): return base64.b64encode(b).decode()
+def b64d(s): return base64.b64decode(s)
 
 
-def canonical_json(data: dict) -> bytes:
-   
-    return json.dumps(
-        data,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":")
-    ).encode("utf-8")
+def canonical_json(d):
+    return json.dumps(d, sort_keys=True, separators=(",", ":")).encode()
 
 
-def derive_kek(passphrase: str, salt: bytes) -> bytes:
-
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=PBKDF2_ITER,
-    )
-    return kdf.derive(passphrase.encode("utf-8"))
-
-
-def build_header(file_path: Path) -> dict:
-
-    stat = file_path.stat()
-
+def build_header(path: Path):
     return {
-        "container_version": 1,
-        "aead_algorithm": "AES-256-GCM",
-        "kdf": "PBKDF2-HMAC-SHA256",
-        "pbkdf2_iterations": PBKDF2_ITER,
-        "nonce_length": NONCE_LEN,
-        "tag_length": TAG_LEN,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "original_filename": file_path.name,
-        "original_size": stat.st_size,
+        "version": 3,
+        "aead": "AES-256-GCM",
+        "asym": "RSA-OAEP-SHA256",
+        "created": datetime.now(timezone.utc).isoformat(),
+        "filename": path.name,
+        "size": path.stat().st_size,
     }
 
 
-def encrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
+# ================= encriptao =================
+def encrypt_file(input_path, output_path, recipients_dict, sign_priv_path, signer_id):
+    path = Path(input_path)
+    data = path.read_bytes()
 
-    file_path = Path(input_path)
+    header = build_header(path)
 
-    if not file_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    if not file_path.is_file():
-        raise ValueError(f"Input path is not a file: {input_path}")
-
-    plaintext = file_path.read_bytes()
-
-    header = build_header(file_path)
-    aad = canonical_json(header)
-
+    # 1. File key
     file_key = os.urandom(DEK_LEN)
 
-    file_nonce = os.urandom(NONCE_LEN)
-    file_cipher = AESGCM(file_key)
-    encrypted_payload = file_cipher.encrypt(file_nonce, plaintext, aad)
+    # 2. Encrypt file
+    nonce = os.urandom(NONCE_LEN)
 
-    ciphertext = encrypted_payload[:-TAG_LEN]
-    auth_tag = encrypted_payload[-TAG_LEN:]
+    recipients = []
+    for uid, pub_path in recipients_dict.items():
+        pk = load_public_key(pub_path)
+        enc_key = rsa_encrypt(pk, file_key)
 
-    kdf_salt = os.urandom(SALT_LEN)
-    kek = derive_kek(passphrase, kdf_salt)
+        recipients.append({
+            "id": uid,
+            "encrypted_key": b64e(enc_key)
+        })
 
-    wrap_nonce = os.urandom(NONCE_LEN)
-    wrap_aad = b"SDDV-DEK-WRAP-v1"
-    key_cipher = AESGCM(kek)
-    wrapped_key_full = key_cipher.encrypt(wrap_nonce, file_key, wrap_aad)
+    aad = canonical_json({
+        "header": header,
+        "recipients": recipients
+    })
 
-    wrapped_key = wrapped_key_full[:-TAG_LEN]
-    wrapped_key_tag = wrapped_key_full[-TAG_LEN:]
+    cipher = AESGCM(file_key)
+    encrypted = cipher.encrypt(nonce, data, aad)
+
+    ciphertext = encrypted[:-TAG_LEN]
+    tag = encrypted[-TAG_LEN:]
 
     container = {
         "header": header,
-        "key_envelope": {
-            "kdf_salt": b64e(kdf_salt),
-            "wrap_nonce": b64e(wrap_nonce),
-            "wrapped_key": b64e(wrapped_key),
-            "wrapped_key_tag": b64e(wrapped_key_tag),
-            "wrap_algorithm": "AES-256-GCM",
-            "wrap_aad": "SDDV-DEK-WRAP-v1",
-        },
+        "recipients": recipients,
         "payload": {
-            "nonce": b64e(file_nonce),
+            "nonce": b64e(nonce),
             "ciphertext": b64e(ciphertext),
-            "tag": b64e(auth_tag),
-        },
+            "tag": b64e(tag)
+        }
     }
 
-    output_file = Path(output_path)
-    output_file.write_text(
-        json.dumps(container, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
+    sk = load_sign_priv(sign_priv_path)
+    container = sign_container(container, sk, signer_id)
 
-def b64d(data: str) -> bytes:
-    return base64.b64decode(data)
+    Path(output_path).write_text(json.dumps(container, indent=2))
 
 
-def decrypt_file(input_path: str, output_path: str, passphrase: str) -> None:
-    input_file = Path(input_path)
-    
-    if not input_file.exists() or input_file.stat().st_size == 0:
-        raise ValueError(f"El archivo '{input_path}' no existe o está vacío.")
+# ================= decriptao =================
+def decrypt_file(input_path, output_path, my_priv_path, my_id, signer_pub_path):
+    container = json.loads(Path(input_path).read_text())
 
-    try:
-        content = input_file.read_text(encoding="utf-8")
-        container = json.loads(content)
-    except json.JSONDecodeError:
-        raise ValueError(f"El archivo '{input_path}' no es un archivo .vault válido (JSON corrupto).")
+    pk = load_sign_pub(signer_pub_path)
+    if not verify_container_signature(container, pk):
+        raise ValueError("Firma inválida")
 
     header = container["header"]
-    envelope = container["key_envelope"]
+    recipients = container["recipients"]
     payload = container["payload"]
 
-    kdf_salt = b64d(envelope["kdf_salt"])
-    kek = derive_kek(passphrase, kdf_salt)
+    # Find my key
+    entry = next((r for r in recipients if r["id"] == my_id), None)
+    if not entry:
+        raise ValueError("No autorizado")
 
-    wrap_nonce = b64d(envelope["wrap_nonce"])
-    wrapped_key = b64d(envelope["wrapped_key"])
-    wrapped_key_tag = b64d(envelope["wrapped_key_tag"])
-    wrap_aad = envelope["wrap_aad"].encode("utf-8")
+    sk = load_private_key(my_priv_path)
+    file_key = rsa_decrypt(sk, b64d(entry["encrypted_key"]))
 
-    key_cipher = AESGCM(kek)
-    file_key = key_cipher.decrypt(wrap_nonce, wrapped_key + wrapped_key_tag, wrap_aad)
+    aad = canonical_json({
+        "header": header,
+        "recipients": recipients
+    })
 
-    aad = canonical_json(header)
-    file_nonce = b64d(payload["nonce"])
+    nonce = b64d(payload["nonce"])
     ciphertext = b64d(payload["ciphertext"])
-    auth_tag = b64d(payload["tag"])
+    tag = b64d(payload["tag"])
 
-    file_cipher = AESGCM(file_key)
-    plaintext = file_cipher.decrypt(file_nonce, ciphertext + auth_tag, aad)
+    cipher = AESGCM(file_key)
+    plaintext = cipher.decrypt(nonce, ciphertext + tag, aad)
 
     Path(output_path).write_bytes(plaintext)
 
 
-def main() -> None:
-    if len(sys.argv) < 5:
-        print("Usage: python encryption.py <enc|dec> <input_file> <output_file> <passphrase>")
-        sys.exit(1)
+# ================= main - interaccion en consola =================
+def main():
+    if len(sys.argv) < 2:
+        print("Uso:")
+        print(" genrsa priv.pem pub.pem")
+        print(" enc in out signer_priv signer_id user1=pub1 user2=pub2 ...")
+        print(" dec in out my_priv my_id signer_pub")
+        return
 
-    action = sys.argv[1]
-    input_file = sys.argv[2]
-    output_file = sys.argv[3]
-    passphrase = sys.argv[4]
+    cmd = sys.argv[1]
 
-    try:
-        if action == "enc":
-            encrypt_file(input_file, output_file, passphrase)
-            print(f"Cifrado exitoso: {output_file}")
-        elif action == "dec":
-            decrypt_file(input_file, output_file, passphrase)
-            print(f"Descifrado exitoso: {output_file}")
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    if cmd == "genrsa":
+        generate_rsa_keypair(sys.argv[2], sys.argv[3])
+
+    elif cmd == "genkeys":
+        generate_signing_keypair(sys.argv[2], sys.argv[3])
+
+    elif cmd == "enc":
+        input_file = sys.argv[2]
+        output_file = sys.argv[3]
+        sign_priv = sys.argv[4]
+        signer_id = sys.argv[5]
+
+        recipients = {}
+        for pair in sys.argv[6:]:
+            uid, pub = pair.split("=")
+            recipients[uid] = pub
+
+        encrypt_file(input_file, output_file, recipients, sign_priv, signer_id)
+
+    elif cmd == "dec":
+        decrypt_file(
+            sys.argv[2],
+            sys.argv[3],
+            sys.argv[4],
+            sys.argv[5],
+            sys.argv[6]
+        )
 
 
 if __name__ == "__main__":
     main()
-
-
