@@ -1,5 +1,7 @@
+'use client';
+
 import { Shield, Key, Bell, Monitor, Download } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();

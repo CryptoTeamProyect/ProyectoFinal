@@ -1,5 +1,7 @@
+'use client';
+
 import { Lock, Unlock, FileCheck, Key, Clock } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 
 export function Dashboard() {
   const { theme } = useTheme();

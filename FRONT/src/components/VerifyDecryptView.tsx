@@ -1,6 +1,8 @@
+'use client';
+
 import { useState } from 'react';
 import { Upload, ShieldCheck, CheckCircle2, Unlock, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 
 export function VerifyDecryptView() {
   const { theme } = useTheme();

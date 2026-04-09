@@ -1,6 +1,8 @@
+'use client';
+
 import { useState } from 'react';
 import { Upload, Lock, Users, Shield } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 
 export function EncryptView() {
   const { theme } = useTheme();

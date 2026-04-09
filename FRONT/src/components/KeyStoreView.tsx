@@ -1,6 +1,8 @@
+'use client';
+
 import { useState } from 'react';
 import { Key, Plus, Download, Upload, Trash2, Copy, Check } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '@/context/ThemeContext';
 
 interface Contact {
   id: string;

@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 type Theme = 'dark' | 'light';
@@ -10,14 +12,19 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('vault-theme');
-    return (saved as Theme) || 'dark';
-  });
+  const [theme, setTheme] = useState<Theme>('dark');
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    const saved = localStorage.getItem('vault-theme');
+    if (saved === 'light' || saved === 'dark') setTheme(saved);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     localStorage.setItem('vault-theme', theme);
-  }, [theme]);
+  }, [theme, hydrated]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>

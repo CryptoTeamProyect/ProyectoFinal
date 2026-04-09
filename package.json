@@ -1,0 +1,11 @@
+{
+  "name": "proyecto-final",
+  "private": true,
+  "description": "Raíz del repo: el frontend Next.js vive en FRONT/",
+  "scripts": {
+    "dev": "npm run dev --prefix FRONT",
+    "build": "npm run build --prefix FRONT",
+    "start": "npm run start --prefix FRONT",
+    "lint": "npm run lint --prefix FRONT"
+  }
+}
