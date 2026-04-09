@@ -2,19 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Lock, ShieldCheck, Key, Settings, User } from 'lucide-react';
+import { Home, Lock, ShieldCheck, Key, User, Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 
 export function VaultShell({ children }: { children: React.ReactNode }) {
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const pathname = usePathname();
 
   const menuItems = [
     { path: '/', icon: Home, label: 'Inicio' },
     { path: '/encrypt', icon: Lock, label: 'Cifrar' },
     { path: '/verify', icon: ShieldCheck, label: 'Verificar' },
-    { path: '/keystore', icon: Key, label: 'Llavero' },
-    { path: '/settings', icon: Settings, label: 'Ajustes' },
+    { path: '/keystore', icon: Key, label: 'Claves' },
   ];
 
   const linkClassName = (href: string) => {
@@ -66,8 +65,8 @@ export function VaultShell({ children }: { children: React.ReactNode }) {
               <span className="text-xs font-semibold">SV</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Secure Vault</p>
-              <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>v1.0.0</p>
+              <p className="text-sm font-medium truncate">Vault</p>
+              <p className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Python</p>
             </div>
           </div>
         </div>
@@ -76,23 +75,28 @@ export function VaultShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header
           className={`h-16 border-b flex items-center justify-between px-6 ${
-            theme === 'dark'
-              ? 'border-slate-800 bg-slate-900'
-              : 'border-slate-200 bg-white'
+            theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
           }`}
         >
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-semibold">Bóveda</h2>
-          </div>
+          <h2 className="text-xl font-semibold">Bóveda</h2>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className={`flex items-center gap-2 px-4 py-2 ${theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'} rounded-lg transition-colors`}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className={`p-2 rounded-lg transition-colors ${
+                theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-200 hover:bg-slate-300'
+              }`}
+              aria-label={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
             >
-              <User className="w-5 h-5" />
-              <span className="text-sm font-medium">Usuario</span>
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
+            <div
+              className={`flex items-center gap-2 px-3 py-2 ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'} rounded-lg`}
+            >
+              <User className="w-5 h-5 opacity-70" />
+              <span className="text-sm font-medium hidden sm:inline">Local</span>
+            </div>
           </div>
         </header>
 

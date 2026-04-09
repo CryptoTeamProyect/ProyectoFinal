@@ -1,0 +1,27 @@
+# --- Datos de usuario / bóveda (no subir a GitHub) ---
+vault_data/
+
+# Claves y contenedores criptográficos (también si se generan fuera de vault_data/)
+*.pem
+*.key
+*.vault
+
+# --- Secretos y entorno ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# --- Logs y archivos del sistema ---
+*.log
+.DS_Store
+Thumbs.db
