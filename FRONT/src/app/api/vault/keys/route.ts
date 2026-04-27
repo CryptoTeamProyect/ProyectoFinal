@@ -3,42 +3,51 @@ import { readdirSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { getProjectRoot } from '@/lib/vault-paths';
 
+// --- ESTO SIRVE PARA LISTAR LAS LLAVES ---
 export async function GET() {
   try {
     const root = getProjectRoot(); 
     const isVercel = process.env.NODE_ENV === 'production' || process.env.VERCEL;
-
-    // Ajustamos la ruta para que coincida EXACTAMENTE con donde Python guarda los archivos
-    // En Vercel, Python guarda directo en /tmp/ para evitar errores de carpetas
-    const keysDir = isVercel 
-      ? root  // En Vercel, root ya es '/tmp'
-      : join(root, 'vault_data', 'keys'); 
-
-    console.log("Buscando llaves en:", keysDir);
+    const keysDir = isVercel ? root : join(root, 'vault_data', 'keys'); 
 
     if (!existsSync(keysDir)) {
-      // Si no existe en local, la creamos. En Vercel /tmp siempre existe.
       if (!isVercel) mkdirSync(keysDir, { recursive: true });
       return NextResponse.json({ keys: [] });
     }
 
     const files = readdirSync(keysDir);
-    
-    // Filtramos para mostrar solo los archivos que Python genera (.pub, .pem, .key, .sig)
     const keys = files.filter(f => 
-      f.endsWith('.pub') || 
-      f.endsWith('.pem') || 
-      f.endsWith('.key') || 
-      f.endsWith('.sig')
+      f.endsWith('.pub') || f.endsWith('.pem') || f.endsWith('.key') || f.endsWith('.sig')
     );
 
     return NextResponse.json({ keys });
   } catch (error) {
-    console.error("Error al listar llaves:", error);
-    return NextResponse.json({ 
-      keys: [], 
-      error: 'No se pudieron listar las llaves',
-      details: error instanceof Error ? error.message : String(error)
-    }, { status: 500 });
+    return NextResponse.json({ keys: [], error: 'Error al listar' }, { status: 500 });
+  }
+}
+
+// --- ESTO SIRVE PARA CREAR LAS LLAVES (EL PUENTE) ---
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { args } = body;
+
+    // Llamamos a tu archivo de Python en Vercel
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+
+    const response = await fetch(`${baseUrl}/api/python_bridge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ args }),
+    });
+
+    const result = await response.json();
+    return NextResponse.json(result);
+
+  } catch (error) {
+    console.error("Error en POST keys:", error);
+    return NextResponse.json({ error: 'Error al generar llave' }, { status: 500 });
   }
 }
