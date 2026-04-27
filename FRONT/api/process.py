@@ -9,8 +9,7 @@ class handler(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length)
         data = json.loads(post_data)
 
-        # Aquí ejecutas tu lógica de criptografía que antes hacías con spawn
-        # resultado = tu_funcion(data['archivo'])
+    
 
         self.send_response(200)
         self.send_header('Content-type', 'application/json')

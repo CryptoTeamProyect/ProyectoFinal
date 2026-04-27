@@ -1,6 +1,3 @@
-import { spawn } from 'child_process';
-import { join } from 'path';
-import { getProjectRoot } from '@/lib/vault-paths';
 
 export async function runEncryptionCli(
   args: string[],
