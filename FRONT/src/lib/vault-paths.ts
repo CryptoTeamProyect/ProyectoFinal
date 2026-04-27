@@ -4,6 +4,12 @@ import { basename, join, resolve } from 'path';
 const VAULT_SUB = 'vault_data';
 
 export function getProjectRoot(): string {
+  // Si detecta que está corriendo en Vercel, fuerza la ruta a la carpeta temporal
+  if (process.env.VERCEL) {
+    return '/tmp';
+  }
+  
+  // Si está en tu computadora local, sigue funcionando normal
   const env = process.env.VAULT_PROJECT_ROOT;
   if (env) return resolve(env);
   return resolve(process.cwd(), '..');
