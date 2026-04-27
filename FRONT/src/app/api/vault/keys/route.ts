@@ -1,52 +1,44 @@
-import { runEncryptionCli } from '@/lib/run-python';
-import {
-  assertValidId,
-  keysDir,
-  listKeyFiles,
-} from '@/lib/vault-paths';
+import { NextResponse } from 'next/server';
+import { readdirSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-
-export const runtime = 'nodejs';
+import { getProjectRoot } from '@/lib/vault-paths';
 
 export async function GET() {
   try {
-    return Response.json({ keys: listKeyFiles() });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Error';
-    return Response.json({ error: msg }, { status: 500 });
-  }
-}
+    const root = getProjectRoot(); 
+    const isVercel = process.env.NODE_ENV === 'production' || process.env.VERCEL;
 
-type Body = { type: 'rsa' | 'signing'; id: string };
+    // Ajustamos la ruta para que coincida EXACTAMENTE con donde Python guarda los archivos
+    // En Vercel, Python guarda directo en /tmp/ para evitar errores de carpetas
+    const keysDir = isVercel 
+      ? root  // En Vercel, root ya es '/tmp'
+      : join(root, 'vault_data', 'keys'); 
 
-export async function POST(request: Request) {
-  try {
-    const body = (await request.json()) as Body;
-    if (!body?.id || (body.type !== 'rsa' && body.type !== 'signing')) {
-      return Response.json({ error: 'JSON inválido: { type: "rsa"|"signing", id }' }, { status: 400 });
-    }
-    assertValidId(body.id);
+    console.log("Buscando llaves en:", keysDir);
 
-    const kd = keysDir();
-    if (body.type === 'rsa') {
-      const priv = join(kd, `${body.id}_rsa_priv.pem`);
-      const pub = join(kd, `${body.id}_rsa_pub.pem`);
-      const r = await runEncryptionCli(['genrsa', priv, pub]);
-      if (!r.ok) {
-        return Response.json({ error: r.stderr || r.stdout || 'genrsa falló' }, { status: 500 });
-      }
-    } else {
-      const priv = join(kd, `${body.id}_sign_priv.key`);
-      const pub = join(kd, `${body.id}_sign_pub.key`);
-      const r = await runEncryptionCli(['genkeys', priv, pub]);
-      if (!r.ok) {
-        return Response.json({ error: r.stderr || r.stdout || 'genkeys falló' }, { status: 500 });
-      }
+    if (!existsSync(keysDir)) {
+      // Si no existe en local, la creamos. En Vercel /tmp siempre existe.
+      if (!isVercel) mkdirSync(keysDir, { recursive: true });
+      return NextResponse.json({ keys: [] });
     }
 
-    return Response.json({ ok: true, keys: listKeyFiles() });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Error';
-    return Response.json({ error: msg }, { status: 400 });
+    const files = readdirSync(keysDir);
+    
+    // Filtramos para mostrar solo los archivos que Python genera (.pub, .pem, .key, .sig)
+    const keys = files.filter(f => 
+      f.endsWith('.pub') || 
+      f.endsWith('.pem') || 
+      f.endsWith('.key') || 
+      f.endsWith('.sig')
+    );
+
+    return NextResponse.json({ keys });
+  } catch (error) {
+    console.error("Error al listar llaves:", error);
+    return NextResponse.json({ 
+      keys: [], 
+      error: 'No se pudieron listar las llaves',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
   }
 }
