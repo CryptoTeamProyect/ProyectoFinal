@@ -2,7 +2,7 @@ export async function runEncryptionCli(
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
   try {
-    // URL FIJA PARA EVITAR ERRORES DE PARSEO EN VERCEL
+    // URL absoluta de tu proyecto en Vercel
     const fullUrl = 'https://proyecto-final-ruddy-mu.vercel.app/api/python_bridge';
 
     const response = await fetch(fullUrl, {
@@ -33,7 +33,7 @@ export async function runEncryptionCli(
     return {
       ok: false,
       stdout: '',
-      stderr: error instanceof Error ? error.message : 'Error de red o parseo',
+      stderr: error instanceof Error ? error.message : 'Error de conexión',
       code: 1,
     };
   }
