@@ -1,14 +1,24 @@
-
 export async function runEncryptionCli(
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
   try {
-    // Llamamos a la API de Python que Vercel sí puede ejecutar
-    const response = await fetch('/api/python_bridge.py', {
+    
+    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` 
+      : (typeof window !== 'undefined' ? window.location.origin : '');
+
+
+    const response = await fetch(`${baseUrl}/api/python_bridge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ args }),
     });
+
+    // Verificamos si la respuesta es JSON antes de parsear
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error en el servidor (${response.status}): ${errorText}`);
+    }
 
     const result = await response.json();
 
@@ -19,6 +29,7 @@ export async function runEncryptionCli(
       code: response.ok ? 0 : 1,
     };
   } catch (error) {
+    console.error("Error en runEncryptionCli:", error);
     return {
       ok: false,
       stdout: '',
