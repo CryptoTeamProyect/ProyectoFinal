@@ -4,7 +4,7 @@ export async function runEncryptionCli(
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
   try {
     // Llamamos a la API de Python que Vercel sí puede ejecutar
-    const response = await fetch('/api/python_bridge', {
+    const response = await fetch('/api/python_bridge.py', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ args }),
