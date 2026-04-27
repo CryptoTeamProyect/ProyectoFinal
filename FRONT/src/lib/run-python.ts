@@ -2,12 +2,8 @@ export async function runEncryptionCli(
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
   try {
-    // 1. Definimos la URL base. 
-    // Usamos la URL de tu proyecto directamente para que no haya falla en el parseo.
-    const baseUrl = 'https://proyecto-final-ruddy-mu.vercel.app';
-
-    // 2. Construimos la URL completa manualmente
-    const fullUrl = `${baseUrl}/api/python_bridge`;
+    // URL FIJA PARA EVITAR ERRORES DE PARSEO EN VERCEL
+    const fullUrl = 'https://proyecto-final-ruddy-mu.vercel.app/api/python_bridge';
 
     const response = await fetch(fullUrl, {
       method: 'POST',
@@ -15,10 +11,14 @@ export async function runEncryptionCli(
       body: JSON.stringify({ args }),
     });
 
-    // Si el servidor responde algo que no es 200-299
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Servidor respondió con status ${response.status}: ${errorText.substring(0, 50)}`);
+      return {
+        ok: false,
+        stdout: '',
+        stderr: `Error del servidor (${response.status}): ${errorText.substring(0, 100)}`,
+        code: 1,
+      };
     }
 
     const result = await response.json();
@@ -30,11 +30,10 @@ export async function runEncryptionCli(
       code: 0,
     };
   } catch (error) {
-    console.error("Error en fetch:", error);
     return {
       ok: false,
       stdout: '',
-      stderr: error instanceof Error ? error.message : 'Error de conexión',
+      stderr: error instanceof Error ? error.message : 'Error de red o parseo',
       code: 1,
     };
   }
