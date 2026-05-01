@@ -45,11 +45,11 @@ export async function POST(request: Request) {
     ]);
 
     if (!result.ok) {
-      return Response.json(
-        { error: result.stderr || result.stdout || 'Descifrado o firma inválida' },
-        { status: 400 },
-      );
-    }
+  return Response.json(
+    { error: 'No se pudo verificar o descifrar el contenedor.' },
+    { status: 400 },
+  );
+}
 
     const plaintext = await readFile(tmpOut);
     let downloadName = 'documento';
@@ -69,10 +69,12 @@ export async function POST(request: Request) {
         'Content-Disposition': `attachment; filename="${safeName}"`,
       },
     });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Error';
-    return Response.json({ error: msg }, { status: 400 });
-  } finally {
+  } catch {
+  return Response.json(
+    { error: 'Entrada inválida o archivo no procesable.' },
+    { status: 400 },
+  );
+} finally { 
     for (const p of [tmpVault, tmpOut]) {
       if (p) {
         try {
