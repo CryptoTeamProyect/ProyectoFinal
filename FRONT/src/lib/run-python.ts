@@ -1,40 +1,30 @@
+import { spawn } from 'child_process';
+import { join } from 'path';
+import { getProjectRoot } from '@/lib/vault-paths';
+
 export async function runEncryptionCli(
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
-  try {
-    // URL absoluta de tu proyecto en Vercel
-    const fullUrl = 'https://proyecto-final-ruddy-mu.vercel.app/api/python_bridge';
+  const root = getProjectRoot();
+  const script = join(root, 'encryption.py');
+  const python = process.env.PYTHON_BIN || 'python3';
 
-    const response = await fetch(fullUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ args }),
+  return new Promise((resolve, reject) => {
+    const child = spawn(python, [script, ...args], {
+      cwd: root,
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        ok: false,
-        stdout: '',
-        stderr: `Error del servidor (${response.status}): ${errorText.substring(0, 100)}`,
-        code: 1,
-      };
-    }
-
-    const result = await response.json();
-
-    return {
-      ok: true,
-      stdout: result.stdout || '',
-      stderr: result.stderr || '',
-      code: 0,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      stdout: '',
-      stderr: error instanceof Error ? error.message : 'Error de conexión',
-      code: 1,
-    };
-  }
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      stderr += d.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({ ok: code === 0, stdout, stderr, code: code ?? 1 });
+    });
+  });
 }
