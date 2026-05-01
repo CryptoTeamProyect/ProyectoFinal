@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     const file = form.get('file');
     const signerId = String(form.get('signerId') || '').trim();
     const signPrivKey = String(form.get('signPrivKey') || '').trim();
+    const signPassword = String(form.get('signPassword') || '');
     const recipientsRaw = String(form.get('recipients') || '[]');
     const outputName = safeOutputName(form.get('outputName') ? String(form.get('outputName')) : null);
 
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Falta archivo' }, { status: 400 });
     }
     assertValidId(signerId);
+    if (!signPassword) {
+      return Response.json({ error: 'Falta la contraseña de la clave privada de firma' }, { status: 400 });
+    }
     const signPrivPath = resolvedKeyPath(signPrivKey);
 
     let recipients: Recip[];
@@ -55,7 +59,7 @@ export async function POST(request: Request) {
     await writeFile(tmpIn, buf);
 
     const outPath = join(outDir(), outputName);
-    args.push(tmpIn, outPath, signPrivPath, signerId);
+    args.push(tmpIn, outPath, signPrivPath, signerId, signPassword);
 
     for (const r of recipients) {
       assertValidId(r.id);

@@ -1,150 +1,160 @@
-import json
 import base64
+import json
+
 import pytest
-from cryptography.exceptions import InvalidTag
-from encryption import encrypt_file, decrypt_file
+
+from asym_encryption import generate_rsa_keypair, load_private_key
+from encryption import decrypt_file, encrypt_file
+from signature import generate_signing_keypair, load_private_key as load_sign_private_key
+
+PASSWORD = "ClaveSegura123!"
+WRONG_PASSWORD = "ClaveIncorrecta456!"
+
+
+def setup_keys(tmp_path):
+    receiver_priv = tmp_path / "receiver_rsa_priv.pem"
+    receiver_pub = tmp_path / "receiver_rsa_pub.pem"
+    generate_rsa_keypair(str(receiver_priv), str(receiver_pub), PASSWORD)
+
+    signer_priv = tmp_path / "signer_priv.pem"
+    signer_pub = tmp_path / "signer_pub.pem"
+    generate_signing_keypair(str(signer_priv), str(signer_pub), PASSWORD)
+
+    return {
+        "receiver_priv": receiver_priv,
+        "receiver_pub": receiver_pub,
+        "signer_priv": signer_priv,
+        "signer_pub": signer_pub,
+    }
+
+
+def encrypt_sample(tmp_path, content=b"archivo de prueba para verificar encrypt -> decrypt."):
+    keys = setup_keys(tmp_path)
+    original_file = tmp_path / "original.txt"
+    original_file.write_bytes(content)
+    encrypted_file = tmp_path / "archivo.vault"
+
+    encrypt_file(
+        str(original_file),
+        str(encrypted_file),
+        {"receiver1": str(keys["receiver_pub"])},
+        str(keys["signer_priv"]),
+        "alice",
+        PASSWORD,
+    )
+    return keys, original_file, encrypted_file
 
 
 def test_encrypt_decrypt_roundtrip(tmp_path):
-    original_file = tmp_path / "original.txt"
     original_content = b"archivo de prueba para verificar encrypt -> decrypt."
-    original_file.write_bytes(original_content)
-
-    encrypted_file = tmp_path / "archivo.vault"
+    keys, _, encrypted_file = encrypt_sample(tmp_path, original_content)
     decrypted_file = tmp_path / "descifrado.txt"
 
-    passphrase = "ClaveSegura123!"
+    decrypt_file(
+        str(encrypted_file),
+        str(decrypted_file),
+        str(keys["receiver_priv"]),
+        "receiver1",
+        str(keys["signer_pub"]),
+        PASSWORD,
+    )
 
-    encrypt_file(str(original_file), str(encrypted_file), passphrase)
-    decrypt_file(str(encrypted_file), str(decrypted_file), passphrase)
-
-    decrypted_content = decrypted_file.read_bytes()
-    assert original_content == decrypted_content
+    assert decrypted_file.read_bytes() == original_content
 
 
-def test_wrong_key_fails(tmp_path):
-    original_file = tmp_path / "original.txt"
-    original_file.write_bytes(b"contenido secreto")
-
-    encrypted_file = tmp_path / "archivo.vault"
+def test_wrong_private_key_password_fails(tmp_path):
+    keys, _, encrypted_file = encrypt_sample(tmp_path, b"contenido secreto")
     decrypted_file = tmp_path / "descifrado.txt"
 
-    correct_passphrase = "ClaveSegura123!"
-    wrong_passphrase = "ClaveIncorrecta456!"
+    with pytest.raises(Exception):
+        decrypt_file(
+            str(encrypted_file),
+            str(decrypted_file),
+            str(keys["receiver_priv"]),
+            "receiver1",
+            str(keys["signer_pub"]),
+            WRONG_PASSWORD,
+        )
 
-    encrypt_file(str(original_file), str(encrypted_file), correct_passphrase)
-
-    # Intentar descifrar con la incorrecta: debe fallar y lanzar una excepción
-    with pytest.raises(InvalidTag):
-        decrypt_file(str(encrypted_file), str(decrypted_file), wrong_passphrase)
-
-    # Verificar que no se haya generado un archivo descifrado válido
     assert not decrypted_file.exists()
 
 
 def test_modified_ciphertext_fails(tmp_path):
-   
-    original_file = tmp_path / "original.txt"
-    original_file.write_bytes(b"contenido secreto que sera alterado")
-
-    encrypted_file = tmp_path / "archivo.vault"
+    keys, _, encrypted_file = encrypt_sample(tmp_path, b"contenido secreto que sera alterado")
     tampered_file = tmp_path / "archivo_tampered.vault"
     decrypted_file = tmp_path / "descifrado.txt"
 
-    passphrase = "ClaveSegura123!"
-
-    # 1. Cifrar normalmente
-    encrypt_file(str(original_file), str(encrypted_file), passphrase)
-
-    # 2. Cargar el contenedor JSON
     container = json.loads(encrypted_file.read_text(encoding="utf-8"))
-
-    # 3. Modificar el ciphertext de forma controlada
-    ciphertext_b64 = container["payload"]["ciphertext"]
-    ciphertext = bytearray(base64.b64decode(ciphertext_b64))
-
-    # Cambiar un byte del ciphertext
+    ciphertext = bytearray(base64.b64decode(container["payload"]["ciphertext"]))
     ciphertext[0] ^= 0x01
+    container["payload"]["ciphertext"] = base64.b64encode(bytes(ciphertext)).decode("ascii")
+    tampered_file.write_text(json.dumps(container, indent=2), encoding="utf-8")
 
-    # Volver a guardar el ciphertext alterado
-    container["payload"]["ciphertext"] = base64.b64encode(bytes(ciphertext)).decode("utf-8")
+    with pytest.raises(ValueError, match="Firma inválida"):
+        decrypt_file(
+            str(tampered_file),
+            str(decrypted_file),
+            str(keys["receiver_priv"]),
+            "receiver1",
+            str(keys["signer_pub"]),
+            PASSWORD,
+        )
 
-    # 4. Guardar el contenedor manipulado
-    tampered_file.write_text(
-        json.dumps(container, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-    # 5. Intentar descifrar: debe fallar
-    with pytest.raises(InvalidTag):
-        decrypt_file(str(tampered_file), str(decrypted_file), passphrase)
-
-    # 6. Verificar que no se haya generado salida válida
     assert not decrypted_file.exists()
+
 
 def test_modified_metadata_fails(tmp_path):
-    
-    original_file = tmp_path / "original.txt"
-    original_file.write_bytes(b"contenido protegido con metadata autenticada")
-
-    
-    encrypted_file = tmp_path / "archivo.vault"
-    tampered_file = tmp_path / "archivo_tampered_metadata.vault"
+    keys, _, encrypted_file = encrypt_sample(tmp_path, b"contenido secreto con metadata")
+    tampered_file = tmp_path / "metadata_tampered.vault"
     decrypted_file = tmp_path / "descifrado.txt"
 
-    passphrase = "ClaveSegura123!"
-
-    # 1. Cifrar normalmente
-    encrypt_file(str(original_file), str(encrypted_file), passphrase)
-
-    # 2. Cargar el contenedor JSON
     container = json.loads(encrypted_file.read_text(encoding="utf-8"))
+    container["header"]["filename"] = "otro_nombre.txt"
+    tampered_file.write_text(json.dumps(container, indent=2), encoding="utf-8")
 
-    # 3. Modificar metadata autenticada del header
-    container["header"]["original_filename"] = "archivo_modificado.txt"
+    with pytest.raises(ValueError, match="Firma inválida"):
+        decrypt_file(
+            str(tampered_file),
+            str(decrypted_file),
+            str(keys["receiver_priv"]),
+            "receiver1",
+            str(keys["signer_pub"]),
+            PASSWORD,
+        )
 
-    # 4. Guardar contenedor manipulado
-    tampered_file.write_text(
-        json.dumps(container, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-    # 5. Intentar descifrar: debe fallar por AAD alterado
-    with pytest.raises(InvalidTag):
-        decrypt_file(str(tampered_file), str(decrypted_file), passphrase)
-
-    # 6. Verificar que no se haya generado salida válida
     assert not decrypted_file.exists()
 
-def test_multiple_encryptions_produce_different_ciphertexts(tmp_path):
-    # Archivo original
-    original_file = tmp_path / "original.txt"
-    original_file.write_bytes(b"mismo contenido para dos cifrados")
 
-    # Salidas de dos cifrados distintos
+def test_multiple_encryptions_produce_different_ciphertexts(tmp_path):
+    keys = setup_keys(tmp_path)
+    original_file = tmp_path / "original.txt"
+    original_file.write_bytes(b"mismo contenido, distintas salidas")
+
     encrypted_file_1 = tmp_path / "archivo1.vault"
     encrypted_file_2 = tmp_path / "archivo2.vault"
 
-    passphrase = "ClaveSegura123!"
+    recipients = {"receiver1": str(keys["receiver_pub"])}
+    encrypt_file(str(original_file), str(encrypted_file_1), recipients, str(keys["signer_priv"]), "alice", PASSWORD)
+    encrypt_file(str(original_file), str(encrypted_file_2), recipients, str(keys["signer_priv"]), "alice", PASSWORD)
 
-    # Cifrar dos veces el mismo archivo
-    encrypt_file(str(original_file), str(encrypted_file_1), passphrase)
-    encrypt_file(str(original_file), str(encrypted_file_2), passphrase)
+    c1 = json.loads(encrypted_file_1.read_text(encoding="utf-8"))
+    c2 = json.loads(encrypted_file_2.read_text(encoding="utf-8"))
 
-    # Cargar ambos contenedores
-    container1 = json.loads(encrypted_file_1.read_text(encoding="utf-8"))
-    container2 = json.loads(encrypted_file_2.read_text(encoding="utf-8"))
+    assert c1["payload"]["nonce"] != c2["payload"]["nonce"]
+    assert c1["payload"]["ciphertext"] != c2["payload"]["ciphertext"]
 
-    # Comparar componentes relevantes
-    ciphertext1 = container1["payload"]["ciphertext"]
-    ciphertext2 = container2["payload"]["ciphertext"]
 
-    nonce1 = container1["payload"]["nonce"]
-    nonce2 = container2["payload"]["nonce"]
+def test_private_keys_are_encrypted_and_require_password(tmp_path):
+    keys = setup_keys(tmp_path)
 
-    salt1 = container1["key_envelope"]["kdf_salt"]
-    salt2 = container2["key_envelope"]["kdf_salt"]
+    rsa_priv_bytes = keys["receiver_priv"].read_bytes()
+    sign_priv_bytes = keys["signer_priv"].read_bytes()
 
-    assert ciphertext1 != ciphertext2
-    assert nonce1 != nonce2
-    assert salt1 != salt2
+    assert b"ENCRYPTED" in rsa_priv_bytes
+    assert b"ENCRYPTED" in sign_priv_bytes
+
+    with pytest.raises(Exception):
+        load_private_key(str(keys["receiver_priv"]), WRONG_PASSWORD)
+
+    with pytest.raises(Exception):
+        load_sign_private_key(str(keys["signer_priv"]), WRONG_PASSWORD)

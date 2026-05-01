@@ -6,22 +6,24 @@ from encryption import encrypt_file, decrypt_file
 from asym_encryption import generate_rsa_keypair
 from signature import generate_signing_keypair
 
+PASSWORD = "ClaveSegura123!"
+
 
 def setup_keys(tmp_path):
     # Receptor autorizado
     receiver_priv = tmp_path / "receiver_priv.pem"
     receiver_pub = tmp_path / "receiver_pub.pem"
-    generate_rsa_keypair(str(receiver_priv), str(receiver_pub))
+    generate_rsa_keypair(str(receiver_priv), str(receiver_pub), PASSWORD)
 
     # Firmante legítimo
     signer_priv = tmp_path / "signer_priv.key"
     signer_pub = tmp_path / "signer_pub.key"
-    generate_signing_keypair(str(signer_priv), str(signer_pub))
+    generate_signing_keypair(str(signer_priv), str(signer_pub), PASSWORD)
 
     # Firmante falso
     fake_signer_priv = tmp_path / "fake_signer_priv.key"
     fake_signer_pub = tmp_path / "fake_signer_pub.key"
-    generate_signing_keypair(str(fake_signer_priv), str(fake_signer_pub))
+    generate_signing_keypair(str(fake_signer_priv), str(fake_signer_pub), PASSWORD)
 
     return {
         "receiver_priv": receiver_priv,
@@ -48,7 +50,8 @@ def create_valid_container(tmp_path, keys):
         str(vault_file),
         recipients,
         str(keys["signer_priv"]),
-        "Tristan"
+        "Tristan",
+        PASSWORD
     )
 
     return original_file, original_content, vault_file
@@ -65,7 +68,8 @@ def test_valid_signature_file_accepted(tmp_path):
         str(output_file),
         str(keys["receiver_priv"]),
         "receiver1",
-        str(keys["signer_pub"])
+        str(keys["signer_pub"]),
+        PASSWORD
     )
 
     assert output_file.exists()
@@ -93,7 +97,8 @@ def test_modified_ciphertext_rejected(tmp_path):
             str(output_file),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
     assert not output_file.exists()
@@ -117,7 +122,8 @@ def test_modified_metadata_rejected(tmp_path):
             str(output_file),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
     assert not output_file.exists()
@@ -135,7 +141,8 @@ def test_wrong_public_key_rejected(tmp_path):
             str(output_file),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["fake_signer_pub"])
+            str(keys["fake_signer_pub"]),
+            PASSWORD
         )
 
     assert not output_file.exists()
@@ -159,7 +166,8 @@ def test_signature_removed_rejected(tmp_path):
             str(output_file),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
     assert not output_file.exists()
@@ -171,7 +179,7 @@ def test_multiple_recipients_can_decrypt(tmp_path):
 
     user2_priv = tmp_path / "user2_priv.pem"
     user2_pub = tmp_path / "user2_pub.pem"
-    generate_rsa_keypair(str(user2_priv), str(user2_pub))
+    generate_rsa_keypair(str(user2_priv), str(user2_pub), PASSWORD)
 
     original = tmp_path / "file.txt"
     original.write_bytes(b"multi user test")
@@ -188,18 +196,19 @@ def test_multiple_recipients_can_decrypt(tmp_path):
         str(vault),
         recipients,
         str(keys["signer_priv"]),
-        "Tristan"
+        "Tristan",
+        PASSWORD
     )
 
     out1 = tmp_path / "out1.txt"
     decrypt_file(str(vault), str(out1),
                  str(keys["receiver_priv"]), "user1",
-                 str(keys["signer_pub"]))
+                 str(keys["signer_pub"]), PASSWORD)
 
     out2 = tmp_path / "out2.txt"
     decrypt_file(str(vault), str(out2),
                  str(user2_priv), "user2",
-                 str(keys["signer_pub"]))
+                 str(keys["signer_pub"]), PASSWORD)
 
     assert out1.read_bytes() == b"multi user test"
     assert out2.read_bytes() == b"multi user test"
@@ -210,7 +219,7 @@ def test_unauthorized_user_cannot_decrypt(tmp_path):
 
     evil_priv = tmp_path / "evil_priv.pem"
     evil_pub = tmp_path / "evil_pub.pem"
-    generate_rsa_keypair(str(evil_priv), str(evil_pub))
+    generate_rsa_keypair(str(evil_priv), str(evil_pub), PASSWORD)
 
     _, _, vault = create_valid_container(tmp_path, keys)
 
@@ -220,7 +229,8 @@ def test_unauthorized_user_cannot_decrypt(tmp_path):
             str(tmp_path / "out.txt"),
             str(evil_priv),
             "evil",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
 
@@ -244,7 +254,8 @@ def test_tampered_recipient_list_fails(tmp_path):
             str(tmp_path / "out.txt"),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
 
@@ -253,7 +264,7 @@ def test_wrong_private_key_fails(tmp_path):
 
     wrong_priv = tmp_path / "wrong_priv.pem"
     wrong_pub = tmp_path / "wrong_pub.pem"
-    generate_rsa_keypair(str(wrong_priv), str(wrong_pub))
+    generate_rsa_keypair(str(wrong_priv), str(wrong_pub), PASSWORD)
 
     _, _, vault = create_valid_container(tmp_path, keys)
 
@@ -263,7 +274,8 @@ def test_wrong_private_key_fails(tmp_path):
             str(tmp_path / "out.txt"),
             str(wrong_priv),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 
 
@@ -284,6 +296,7 @@ def test_removing_recipient_breaks_access(tmp_path):
             str(tmp_path / "out.txt"),
             str(keys["receiver_priv"]),
             "receiver1",
-            str(keys["signer_pub"])
+            str(keys["signer_pub"]),
+            PASSWORD
         )
 

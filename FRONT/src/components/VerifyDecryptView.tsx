@@ -17,6 +17,7 @@ export function VerifyDecryptView() {
   const [file, setFile] = useState<File | null>(null);
   const [myId, setMyId] = useState('');
   const [myPrivKey, setMyPrivKey] = useState('');
+  const [privatePassword, setPrivatePassword] = useState('');
   const [signerPubKey, setSignerPubKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -40,8 +41,8 @@ export function VerifyDecryptView() {
       setMsg('Elige el contenedor .vault');
       return;
     }
-    if (!myId.trim() || !myPrivKey || !signerPubKey) {
-      setMsg('Completa id, tu RSA privada y clave pública del firmante');
+    if (!myId.trim() || !myPrivKey || !privatePassword || !signerPubKey) {
+      setMsg('Completa id, tu RSA privada, su contraseña y la clave pública del firmante');
       return;
     }
 
@@ -51,6 +52,7 @@ export function VerifyDecryptView() {
       form.set('file', file);
       form.set('myId', myId.trim());
       form.set('myPrivKey', myPrivKey);
+      form.set('privatePassword', privatePassword);
       form.set('signerPubKey', signerPubKey);
 
       const r = await fetch('/api/vault/decrypt', { method: 'POST', body: form });
@@ -128,6 +130,15 @@ export function VerifyDecryptView() {
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className={`text-sm font-medium ${muted}`}>Contraseña de tu RSA privada</label>
+          <input
+            type="password"
+            value={privatePassword}
+            onChange={(e) => setPrivatePassword(e.target.value)}
+            className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${input}`}
+          />
         </div>
         <div>
           <label className={`text-sm font-medium ${muted}`}>Clave pública de firma del emisor</label>

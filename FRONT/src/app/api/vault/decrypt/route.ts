@@ -19,12 +19,16 @@ export async function POST(request: Request) {
     const file = form.get('file');
     const myId = String(form.get('myId') || '').trim();
     const myPrivKey = String(form.get('myPrivKey') || '').trim();
+    const privatePassword = String(form.get('privatePassword') || '');
     const signerPubKey = String(form.get('signerPubKey') || '').trim();
 
     if (!(file instanceof File) || file.size === 0) {
       return Response.json({ error: 'Falta contenedor' }, { status: 400 });
     }
     assertValidId(myId);
+    if (!privatePassword) {
+      return Response.json({ error: 'Falta la contraseña de tu clave privada RSA' }, { status: 400 });
+    }
     const myPrivPath = resolvedKeyPath(myPrivKey);
     const signerPubPath = resolvedKeyPath(signerPubKey);
 
@@ -42,9 +46,12 @@ export async function POST(request: Request) {
       myPrivPath,
       myId,
       signerPubPath,
+      privatePassword,
     ]);
 
     if (!result.ok) {
+  console.error('VAULT DECRYPT ERROR:', result.stderr || result.stdout);
+
   return Response.json(
     { error: 'No se pudo verificar o descifrar el contenedor.' },
     { status: 400 },
@@ -69,12 +76,14 @@ export async function POST(request: Request) {
         'Content-Disposition': `attachment; filename="${safeName}"`,
       },
     });
-  } catch {
+  }  catch (e) {
+  console.error('VAULT DECRYPT ROUTE ERROR:', e);
+
   return Response.json(
     { error: 'Entrada inválida o archivo no procesable.' },
     { status: 400 },
   );
-} finally { 
+} finally {
     for (const p of [tmpVault, tmpOut]) {
       if (p) {
         try {

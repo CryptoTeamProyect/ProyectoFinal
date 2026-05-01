@@ -15,6 +15,8 @@ export function KeyStoreView() {
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [newId, setNewId] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -35,17 +37,27 @@ export function KeyStoreView() {
       setMsg('Escribe un identificador (ej. alice)');
       return;
     }
+    if (password.length < 8) {
+      setMsg('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setMsg('Las contraseñas no coinciden.');
+      return;
+    }
     setLoading(true);
     try {
       const r = await fetch('/api/vault/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, id: newId.trim() }),
+        body: JSON.stringify({ type, id: newId.trim(), password }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Error');
       setKeys(d.keys || []);
       setNewId('');
+      setPassword('');
+      setConfirmPassword('');
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -58,8 +70,8 @@ export function KeyStoreView() {
       <div>
         <h1 className="text-2xl font-bold">Claves</h1>
         <p className={`text-sm mt-1 ${muted}`}>
-          Se guardan en <code className="text-xs">vault_data/keys/</code> (RSA para cifrado, Ed25519 para firmar
-          contenedores).
+          Se guardan en <code className="text-xs">vault_data/keys/</code>. Las claves privadas RSA y Ed25519 se
+          cifran con una contraseña antes de almacenarse.
         </p>
       </div>
 
@@ -73,6 +85,26 @@ export function KeyStoreView() {
           placeholder="ej. alice"
           className={`w-full rounded-lg border px-3 py-2 text-sm ${input}`}
         />
+        <div>
+          <label className={`text-sm font-medium ${muted}`}>Contraseña para proteger la clave privada</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="mínimo 8 caracteres"
+            className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${input}`}
+          />
+        </div>
+        <div>
+          <label className={`text-sm font-medium ${muted}`}>Confirmar contraseña</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${input}`}
+          />
+        </div>
+        <p className={`text-xs ${muted}`}>Guarda esta contraseña: será necesaria para firmar o descifrar.</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

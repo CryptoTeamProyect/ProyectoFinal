@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { basename, join, resolve } from 'path';
+import { basename, join, resolve, relative, isAbsolute } from 'path';
 
 const VAULT_SUB = 'vault_data';
 
@@ -49,11 +49,15 @@ export function assertKeyBasename(name: string): void {
 
 export function resolvedKeyPath(name: string): string {
   assertKeyBasename(name);
-  const full = resolve(join(keysDir(), basename(name)));
+
   const kd = resolve(keysDir());
-  if (!full.startsWith(kd + '/') && full !== kd) {
+  const full = resolve(join(kd, basename(name)));
+  const rel = relative(kd, full);
+
+  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
     throw new Error('Ruta de clave inválida.');
   }
+
   return full;
 }
 

@@ -19,6 +19,7 @@ export function EncryptView() {
   const [file, setFile] = useState<File | null>(null);
   const [signerId, setSignerId] = useState('');
   const [signPrivKey, setSignPrivKey] = useState('');
+  const [signPassword, setSignPassword] = useState('');
   const [outputName, setOutputName] = useState('');
   const [recipients, setRecipients] = useState<RecipRow[]>([{ id: '', pubKey: '' }]);
   const [loading, setLoading] = useState(false);
@@ -57,8 +58,8 @@ export function EncryptView() {
       setMsg('Elige un archivo');
       return;
     }
-    if (!signerId.trim() || !signPrivKey) {
-      setMsg('Firmante e identificador obligatorios');
+    if (!signerId.trim() || !signPrivKey || !signPassword) {
+      setMsg('Firmante, clave privada y contraseña obligatorios');
       return;
     }
     const rec = recipients.filter((r) => r.id.trim() && r.pubKey);
@@ -73,6 +74,7 @@ export function EncryptView() {
       form.set('file', file);
       form.set('signerId', signerId.trim());
       form.set('signPrivKey', signPrivKey);
+      form.set('signPassword', signPassword);
       if (outputName.trim()) form.set('outputName', outputName.trim());
       form.set('recipients', JSON.stringify(rec.map((r) => ({ id: r.id.trim(), pubKey: r.pubKey }))));
 
@@ -131,6 +133,15 @@ export function EncryptView() {
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className={`text-sm font-medium ${muted}`}>Contraseña de la clave privada de firma</label>
+          <input
+            type="password"
+            value={signPassword}
+            onChange={(e) => setSignPassword(e.target.value)}
+            className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${input}`}
+          />
         </div>
         <div>
           <label className={`text-sm font-medium ${muted}`}>Nombre salida (opcional)</label>
