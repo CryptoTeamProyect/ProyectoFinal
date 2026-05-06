@@ -130,3 +130,48 @@ def test_audit_key_identifier_signer_id_should_be_rejected_vulnerability(tmp_pat
 
     with pytest.raises(ValueError, match="Firma inválida"):
         _try_decrypt(tmp_path, tampered, keys)
+
+
+# 6) Signature removal: eliminar completamente la firma.
+def test_audit_signature_removal_is_detected(tmp_path):
+    keys = _setup_vault(tmp_path)
+    container = _load_container(keys["vault"])
+
+    # Se elimina el campo signature del bloque de firma.
+    del container["signature_block"]["signature"]
+
+    tampered = tmp_path / "signature_removed.vault"
+    _write_container(tampered, container)
+
+    # El sistema debe rechazar el archivo porque la firma ya no está presente.
+    with pytest.raises(ValueError, match="Firma inválida"):
+        _try_decrypt(tmp_path, tampered, keys)
+
+
+
+# 7) Wrong key usage: intentar descifrar con una clave privada incorrecta.
+def test_audit_wrong_private_key_usage_is_detected(tmp_path):
+    keys = _setup_vault(tmp_path)
+
+    wrong_priv = tmp_path / "wrong_priv.pem"
+    wrong_pub = tmp_path / "wrong_pub.pem"
+
+    # Se genera otro par de claves RSA que no pertenece al receptor autorizado.
+    generate_rsa_keypair(str(wrong_priv), str(wrong_pub), PASSWORD)
+
+    output = tmp_path / "salida_wrong_key.txt"
+
+    # Se intenta descifrar usando el id correcto, pero con una clave privada incorrecta.
+    # El sistema debe rechazar el descifrado.
+    with pytest.raises(ValueError):
+        decrypt_file(
+            str(keys["vault"]),
+            str(output),
+            str(wrong_priv),
+            "receiver1",
+            str(keys["signer_pub"]),
+            PASSWORD,
+        )
+
+    # Si el sistema falla correctamente, no debe generar archivo de salida.
+    assert not output.exists()
