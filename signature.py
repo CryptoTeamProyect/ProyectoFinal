@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import binascii
 import base64
 import json
 from pathlib import Path
@@ -32,7 +32,12 @@ def b64e(data: bytes) -> str:
 
 
 def b64d(data: str) -> bytes:
-    return base64.b64decode(data)
+    if not isinstance(data, str):
+        raise ValueError("Base64 inválido")
+    try:
+        return base64.b64decode(data, validate=True)
+    except binascii.Error as exc:
+        raise ValueError("Base64 inválido") from exc
 
 
 def canonical_json(data: dict) -> bytes:
@@ -97,34 +102,51 @@ def load_public_key(path: str):
     return Ed25519PublicKey.from_public_bytes(data)
 
 
-def build_manifest(container: dict) -> dict:
+def build_manifest(container: dict, signature_metadata: dict) -> dict:
     return {
         "header": container["header"],
         "recipients": container["recipients"],
         "payload": container["payload"],
+        "signature_metadata": {
+            "algorithm": signature_metadata["algorithm"],
+            "signer_id": signature_metadata["signer_id"],
+        },
     }
 
 
 def sign_container(container: dict, sk: Ed25519PrivateKey, signer_id: str) -> dict:
-    manifest = build_manifest(container)
+    signature_metadata = {
+        "algorithm": "Ed25519",
+        "signer_id": signer_id,
+    }
+
+    manifest = build_manifest(container, signature_metadata)
     sig = sk.sign(canonical_json(manifest))
 
     out = dict(container)
     out["signature_block"] = {
-        "algorithm": "Ed25519",
-        "signer_id": signer_id,
+        **signature_metadata,
         "signature": b64e(sig),
     }
+
     return out
 
 
 def verify_container_signature(container: dict, pk: Ed25519PublicKey) -> bool:
     try:
         sig_block = container["signature_block"]
-        if sig_block.get("algorithm") != "Ed25519":
+
+        signature_metadata = {
+            "algorithm": sig_block["algorithm"],
+            "signer_id": sig_block["signer_id"],
+        }
+
+        if signature_metadata["algorithm"] != "Ed25519":
             return False
-        manifest = build_manifest(container)
+
+        manifest = build_manifest(container, signature_metadata)
         pk.verify(b64d(sig_block["signature"]), canonical_json(manifest))
         return True
+
     except (InvalidSignature, KeyError, TypeError, ValueError):
         return False
