@@ -10,6 +10,7 @@ from typing import Dict
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from key_management import export_keystore_backup, restore_keystore_backup
 from asym_encryption import generate_rsa_keypair, load_private_key, load_public_key, rsa_decrypt, rsa_encrypt
 from signature import (
     generate_signing_keypair,
@@ -146,6 +147,8 @@ def _usage() -> None:
     print("  genkeys priv.pem pub.pem password")
     print("  enc in out signer_priv signer_id signer_password user1=pub1 user2=pub2 ...")
     print("  dec in out my_priv my_id signer_pub private_password")
+    print("  backup keystore_dir backup_file backup_password")
+    print("  restore backup_file destination_dir backup_password")
 
 
 def main():
@@ -190,6 +193,18 @@ def main():
                 _usage()
                 sys.exit(2)
             decrypt_file(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7])
+
+        elif cmd == "backup":
+            if len(sys.argv) != 5:
+                _usage()
+                sys.exit(2)
+            export_keystore_backup(sys.argv[2], sys.argv[3], sys.argv[4])
+
+        elif cmd == "restore":
+            if len(sys.argv) != 5:
+                _usage()
+                sys.exit(2)
+            restore_keystore_backup(sys.argv[2], sys.argv[3], sys.argv[4])
 
         else:
             _usage()

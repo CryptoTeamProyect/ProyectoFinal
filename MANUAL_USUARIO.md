@@ -39,7 +39,7 @@ Todo queda en `vault_data/`:
 
 | Subcarpeta | Contenido |
 |---|---|
-| `vault_data/keys/` | Claves RSA y Ed25519. Las privadas están cifradas con contraseña. |
+| `vault_data/keys/` | Claves RSA y Ed25519. Las privadas están cifradas con scrypt + AES-256-GCM. |
 | `vault_data/out/` | Contenedores `.vault`. |
 | `vault_data/tmp/` | Archivos temporales. |
 
@@ -72,7 +72,7 @@ Solo usa letras, números, guion y guion bajo.
 
 ### 5.2 Contraseña de clave privada
 
-Antes de generar una clave, escribe una contraseña y confírmala. Esta contraseña protege la clave privada en disco.
+Antes de generar una clave, escribe una contraseña y confírmala. Esta contraseña protege la clave privada en disco mediante un KDF scrypt y AES-256-GCM.
 
 Importante:
 
@@ -145,7 +145,30 @@ El sistema primero verifica la firma Ed25519. Si la firma no es válida, si falt
 
 ---
 
-## 9. Errores comunes
+## 9. Backup y recuperación de claves
+
+Para D6, el sistema incluye respaldo cifrado del directorio de claves. Esto se hace por CLI desde la raíz del proyecto:
+
+```bash
+python3 encryption.py backup vault_data/keys keystore_backup.vaultbackup "BackupSeguro789!"
+```
+
+Para restaurar:
+
+```bash
+python3 encryption.py restore keystore_backup.vaultbackup vault_data/keys_restored "BackupSeguro789!"
+```
+
+Recomendaciones:
+
+- Guarda el backup en un lugar seguro.
+- No uses la misma contraseña débil para todo.
+- Si pierdes la contraseña de una clave privada, el sistema no puede recuperarla automáticamente.
+- El backup no contiene claves privadas en texto plano.
+
+---
+
+## 10. Errores comunes
 
 | Error | Posible causa |
 |---|---|
@@ -157,12 +180,12 @@ El sistema primero verifica la firma Ed25519. Si la firma no es válida, si falt
 
 ---
 
-## 10. Resumen criptográfico
+## 11. Resumen criptográfico
 
 ```text
 Archivo -> AES-256-GCM con DEK aleatoria
 DEK -> RSA-OAEP-SHA256 por destinatario
 Manifest -> Firma Ed25519
-Claves privadas -> PKCS#8 cifrado con contraseña
+Claves privadas -> keystore JSON cifrado con scrypt + AES-256-GCM
 Verificación -> antes de descifrar
 ```

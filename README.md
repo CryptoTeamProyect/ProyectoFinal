@@ -10,8 +10,9 @@ Sistema para proteger documentos digitales mediante cifrado autenticado, cifrado
 | D2 Cifrado simétrico seguro | Implementado | `encryption.py` usa AES-256-GCM, nonce aleatorio, AAD y detección de manipulación |
 | D3 Cifrado híbrido | Implementado | `asym_encryption.py` usa RSA-OAEP-SHA256 para envolver la clave de archivo por destinatario |
 | D5 Firmas y autenticación | Implementado | `signature.py` usa Ed25519 y `decrypt_file()` verifica antes de descifrar |
-| KeyStore/KDF | Implementado | Claves privadas RSA y Ed25519 se guardan cifradas con contraseña usando PKCS#8 encrypted PEM |
-| Pruebas | Implementadas | `test/test_encryption.py` y `test/test_signatures.py` |
+| D6 Gestión de llaves | Implementado | `key_management.py` usa scrypt + AES-256-GCM, formato estructurado, backup/restore y pruebas D6 |
+| KeyStore/KDF | Implementado | Claves privadas RSA y Ed25519 se guardan cifradas con contraseña mediante keystore JSON estructurado |
+| Pruebas | Implementadas | `test/test_encryption.py`, `test/test_signatures.py`, `test/test_guided_audit.py` y `test/test_key_management.py` |
 
 ---
 
@@ -311,17 +312,126 @@ Un atacante podría cambiar filename, algoritmos, destinatarios o contexto sin r
 
 ---
 
-# KeyStore / KDF
+# D6 — Key Management
 
-Las claves privadas no se almacenan en texto plano.
+## Objetivo de seguridad
 
-- RSA privada: PEM PKCS#8 cifrado con contraseña.
-- Ed25519 privada: PEM PKCS#8 cifrado con contraseña.
-- Claves públicas: PEM sin cifrar.
+Las claves privadas deben permanecer confidenciales y solo deben ser utilizables por usuarios autorizados que conozcan la contraseña correcta, incluso si el almacenamiento del keystore es robado o copiado.
 
-`cryptography.serialization.BestAvailableEncryption(password)` usa un esquema estándar de cifrado de clave privada basado en contraseña. En la práctica, esto deriva una clave de cifrado desde la contraseña y guarda la clave privada protegida en disco.
+## Protección de claves privadas
 
-Limitaciones: si el usuario usa una contraseña débil, un atacante con el archivo de clave puede intentar ataques offline. Por eso la interfaz exige mínimo 8 caracteres y el manual recomienda contraseñas largas.
+Las claves privadas no se almacenan en texto plano. El formato nuevo de D6 usa un keystore JSON estructurado implementado en `key_management.py`.
+
+- RSA privada: JSON cifrado con scrypt + AES-256-GCM.
+- Ed25519 privada: JSON cifrado con scrypt + AES-256-GCM.
+- Claves públicas: PEM sin cifrar porque están diseñadas para compartirse.
+
+## KDF seleccionado
+
+Se usa `scrypt` porque es un KDF resistente a ataques offline y costoso en memoria.
+
+| Parámetro | Valor | Propósito |
+|---|---:|---|
+| KDF | scrypt | Derivar una clave desde contraseña |
+| Salt | 16 bytes aleatorios | Evitar tablas precomputadas y claves repetidas |
+| n | 16384 | Costo CPU/memoria |
+| r | 8 | Parámetro de bloque |
+| p | 1 | Paralelización |
+| Longitud derivada | 32 bytes | Clave AES-256-GCM |
+| Nonce AES-GCM | 12 bytes aleatorios | Cifrado autenticado del keystore |
+
+## Formato de almacenamiento de llave privada
+
+```json
+{
+  "format": "vault-key-store",
+  "version": 1,
+  "key_type": "rsa-private",
+  "protection": "ENCRYPTED_WITH_SCRYPT_AES_256_GCM",
+  "kdf": {
+    "algorithm": "scrypt",
+    "salt": "base64",
+    "n": 16384,
+    "r": 8,
+    "p": 1,
+    "length": 32
+  },
+  "encryption": {
+    "algorithm": "AES-256-GCM",
+    "nonce": "base64"
+  },
+  "metadata": {
+    "created": "timestamp",
+    "usage": "file_key_unwrapping",
+    "algorithm": "RSA-OAEP-SHA256"
+  },
+  "encrypted_private_key": "base64"
+}
+```
+
+Los campos de formato, tipo de llave, parámetros KDF, algoritmo y metadata se usan como AAD del AES-GCM del keystore. Por eso modificar metadata, salt, parámetros o ciphertext provoca fallo al cargar la llave.
+
+## Acceso basado en contraseña
+
+Al usar una clave privada, el sistema:
+
+1. Lee el keystore cifrado.
+2. Solicita o recibe la contraseña.
+3. Deriva una clave con scrypt usando el salt y parámetros guardados.
+4. Descifra la clave privada solo cuando es necesaria.
+5. Si la contraseña es incorrecta o el keystore fue modificado, el acceso falla.
+
+El sistema no guarda contraseñas y no almacena claves privadas descifradas en disco.
+
+## Ciclo de vida de llaves
+
+| Fase | Manejo definido |
+|---|---|
+| Generación | `genrsa` crea RSA-2048 para desenvolver DEK; `genkeys` crea Ed25519 para firma. |
+| Almacenamiento | Privadas cifradas con scrypt + AES-256-GCM; públicas en PEM. |
+| Uso | La privada solo se descifra cuando se firma o descifra un archivo. |
+| Rotación | Generar nuevo par de llaves y usarlo para nuevos documentos; conservar llaves antiguas para abrir contenedores previos. |
+| Compromiso | Revocar confianza en la llave pública afectada, generar llaves nuevas y re-compartir documentos con destinatarios válidos. |
+| Expiración | Conceptual: definir fecha de reemplazo periódico en metadata o política del equipo. |
+
+## Backup y recuperación
+
+`key_management.py` permite exportar un backup cifrado del directorio de keystore. El backup contiene las llaves ya cifradas y además el archivo de backup se cifra con scrypt + AES-256-GCM.
+
+Comandos:
+
+```bash
+python3 encryption.py backup vault_data/keys keystore_backup.vaultbackup "BackupSeguro789!"
+python3 encryption.py restore keystore_backup.vaultbackup vault_data/keys_restored "BackupSeguro789!"
+```
+
+El backup no debilita la seguridad porque no contiene llaves privadas en plaintext. Si alguien roba el backup sin contraseña, no puede recuperar las llaves.
+
+## Control de acceso vía llaves
+
+- Solo el destinatario con la clave privada correcta y la contraseña correcta puede desenvolver la DEK.
+- Compartir archivos sigue dependiendo de `recipients` y de la `encrypted_key` de cada destinatario.
+- La identidad de llave se mantiene mediante `id` de destinatario y tipo de llave (`rsa-private` o `ed25519-private`).
+- Usar una llave incorrecta o una contraseña incorrecta produce fallo.
+
+## Alineación con el threat model
+
+| Escenario | Protección | Limitación |
+|---|---|---|
+| Atacante roba el keystore | No puede usar privadas sin contraseña. | Puede intentar ataque offline contra contraseñas débiles. |
+| Contraseña débil | scrypt encarece ataques offline. | No puede impedir que una contraseña mala sea adivinada. |
+| Dispositivo comprometido | Protege llaves en reposo. | No protege si malware captura contraseña o memoria en tiempo de uso. |
+| Backup robado | Backup está cifrado y contiene privadas cifradas. | Si roban backup y contraseña, podrían restaurarlo. |
+
+## Pruebas D6
+
+`test/test_key_management.py` demuestra:
+
+- Contraseña correcta → acceso concedido.
+- Contraseña incorrecta → acceso denegado.
+- Keystore modificado → falla.
+- Backup → restore funciona.
+- Keystore robado sin contraseña correcta → no descifra.
 
 ---
 
@@ -340,6 +450,8 @@ python3 encryption.py genrsa alice_rsa_priv.pem alice_rsa_pub.pem "ClaveSegura12
 python3 encryption.py genkeys alice_sign_priv.key alice_sign_pub.key "ClaveSegura123!"
 ```
 
+Las claves privadas generadas se guardan como keystore JSON cifrado con scrypt + AES-256-GCM.
+
 ## Cifrar y firmar
 
 ```bash
@@ -350,6 +462,13 @@ python3 encryption.py enc documento.pdf documento.vault alice_sign_priv.key alic
 
 ```bash
 python3 encryption.py dec documento.vault salida.pdf bob_rsa_priv.pem bob alice_sign_pub.key "ClaveBob123!"
+```
+
+## Backup y restore de keystore
+
+```bash
+python3 encryption.py backup vault_data/keys keystore_backup.vaultbackup "BackupSeguro789!"
+python3 encryption.py restore keystore_backup.vaultbackup vault_data/keys_restored "BackupSeguro789!"
 ```
 
 ---
@@ -390,7 +509,12 @@ Pruebas incluidas:
 - Ciphertext modificado falla.
 - Metadata modificada falla.
 - Múltiples cifrados producen nonce/ciphertext distintos.
-- Las claves privadas se guardan cifradas.
+- Las claves privadas se guardan cifradas con scrypt + AES-256-GCM.
+- Contraseña correcta concede acceso a llaves privadas.
+- Contraseña incorrecta niega acceso a llaves privadas.
+- Keystore modificado falla.
+- Backup y restore del keystore funciona.
+- Keystore robado sin contraseña correcta no permite descifrar.
 - Firma válida acepta el archivo.
 - Firma incorrecta o ausente rechaza el archivo.
 - Lista de destinatarios modificada falla.
