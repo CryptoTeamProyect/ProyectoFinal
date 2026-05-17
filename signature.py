@@ -9,6 +9,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
+from key_management import is_structured_keystore, load_private_key_record, write_private_key_record
+
 Password = Optional[Union[str, bytes]]
 
 
@@ -60,12 +62,12 @@ def generate_signing_keypair(priv: str, pub: str, password: Password) -> None:
     priv_path.parent.mkdir(parents=True, exist_ok=True)
     pub_path.parent.mkdir(parents=True, exist_ok=True)
 
-    priv_path.write_bytes(
-        sk.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.BestAvailableEncryption(password_b),
-        )
+    write_private_key_record(
+        sk,
+        priv_path,
+        password_b,
+        key_type="ed25519-private",
+        metadata={"usage": "container_signing", "algorithm": "Ed25519"},
     )
     pub_path.write_bytes(
         pk.public_bytes(
@@ -76,6 +78,12 @@ def generate_signing_keypair(priv: str, pub: str, password: Password) -> None:
 
 
 def load_private_key(path: str, password: Password):
+    if is_structured_keystore(path):
+        key = load_private_key_record(path, password, expected_key_type="ed25519-private")
+        if not isinstance(key, Ed25519PrivateKey):
+            raise ValueError("La clave privada de firma no es Ed25519.")
+        return key
+
     data = Path(path).read_bytes()
     if data.startswith(b"-----BEGIN"):
         key = serialization.load_pem_private_key(data, password=_password_bytes(password))

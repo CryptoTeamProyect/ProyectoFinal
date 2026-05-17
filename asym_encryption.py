@@ -13,6 +13,8 @@ from typing import Optional, Union
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from key_management import is_structured_keystore, load_private_key_record, write_private_key_record
+
 Password = Optional[Union[str, bytes]]
 
 
@@ -43,12 +45,12 @@ def generate_rsa_keypair(priv_path: str, pub_path: str, password: Password) -> N
     priv.parent.mkdir(parents=True, exist_ok=True)
     pub.parent.mkdir(parents=True, exist_ok=True)
 
-    priv.write_bytes(
-        pk.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.BestAvailableEncryption(password_b),
-        )
+    write_private_key_record(
+        pk,
+        priv,
+        password_b,
+        key_type="rsa-private",
+        metadata={"usage": "file_key_unwrapping", "algorithm": "RSA-OAEP-SHA256"},
     )
     pub.write_bytes(
         pk.public_key().public_bytes(
@@ -61,9 +63,13 @@ def generate_rsa_keypair(priv_path: str, pub_path: str, password: Password) -> N
 def load_private_key(path: str, password: Password):
     """Carga una clave privada RSA cifrada.
 
-    Se exige contraseña para claves PKCS#8 cifradas. Si la contraseña es
-    incorrecta, `cryptography` lanza ValueError.
+    El formato nuevo de D6 es un keystore JSON cifrado con scrypt + AES-GCM.
+    Se conserva compatibilidad de lectura con PEM PKCS#8 cifrado para llaves
+    antiguas del proyecto.
     """
+    if is_structured_keystore(path):
+        return load_private_key_record(path, password, expected_key_type="rsa-private")
+
     return serialization.load_pem_private_key(
         Path(path).read_bytes(),
         password=_password_bytes(password),
